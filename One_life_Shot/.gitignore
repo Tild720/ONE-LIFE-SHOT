@@ -1,0 +1,22 @@
+# Unreal Engine generated files
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Plugin-generated files
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+
+# IDE and generated project files
+.vs/
+*.sln
+*.suo
+*.VC.db
+*.VC.opendb
+*.xcodeproj
+*.xcworkspace
+
+# Local editor and build artifacts
+*.log
+*.tmp
