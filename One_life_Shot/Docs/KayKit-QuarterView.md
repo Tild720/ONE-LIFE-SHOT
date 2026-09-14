@@ -68,3 +68,12 @@ BP_ThirdPersonPlayerController는 커서를 표시하고 기존 입력 매핑 �
 
 ## 커밋 시점 검증 한계
 Blueprint 컴파일 및 저장은 통과했다. PIE에서 마우스 방향에 따른 회전과 고정 카메라를 부분 확인했지만 전체 방향 자동 검증은 아직 완료하지 못했다. D3D12 GPU 크래시와 현재 맵의 Floor2~Floor10 메시 참조 누락을 확인했다. 바닥 복구는 보류되어 있으며 이 커밋은 해당 맵 수정을 포함하지 않는다. 사용자 요청에 따라 현재 변경을 먼저 커밋한다.
+
+## 바닥 복구 및 저부하 실행 (2026-09-14)
+저장되지 않아 사라진 Floor 에셋을 실제 Assets/fbx/Floor.fbx에서 /Game/Characters/KayKit/Assets/fbx/Floor로 재생성했다. M_Dummy를 사용하고 단순 박스 충돌 1개를 생성했다. Floor2~Floor10의 기존 위치와 배율을 유지하면서 메시를 연결하고 BlockAll 충돌로 저장했다. 재시작 후 9개 참조 유지 확인.
+GPU 렌더링 없는 PIE에서 Idle, WASD, Stop 검사: 모두 Walking 상태, Z 약 142.25 유지. 이동 시 Speed 증가, 정지 시 Speed 0 확인.
+Tools/Start-Unreal-LowLoad.ps1은 이미 에디터가 실행 중이면 중복 실행을 차단한다. DX11, 30FPS, 낮은 Scalability, 60% Screen Percentage, BelowNormal CPU 우선순위로 실행한다. 현재 세션에서 적용값을 직접 확인했다. 기본 프로젝트 RHI는 변경하지 않는다. 이 실행 방식도 무부하나 크래시 방지를 보장하지 않는다.
+
+## 최종 카메라 프레이밍
+CameraBoom Target Offset = (X 225, Y 0, Z 225). Ortho Width 1500의 15%를 월드 X/Z 오프셋으로 적용했다. 실제 화면 픽셀의 15%와는 다르다. Near Clip Plane = -1000으로 앞쪽 바닥 잘림을 해소했다. Blueprint 컴파일 및 저장 완료.
+바닥 복구 후 마우스 네 방향 회전 검증에서 최대 각도 오차 0.05도 이내, 카메라 Yaw -30 고정을 확인했다.
