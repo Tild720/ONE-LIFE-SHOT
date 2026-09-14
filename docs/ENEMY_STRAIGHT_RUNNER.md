@@ -4,7 +4,9 @@
 
 - 적: `/Game/Enemies/BP_EnemyStraightRunner`
 - 단일 생성기: `/Game/Enemies/BP_EnemyRunnerSpawner`
+- 스폰 포인트: `/Game/Enemies/BP_EnemySpawnPoint`
 - 생성기를 레벨에 배치하면 BeginPlay 후 0.1초에 해당 위치에서 적 한 마리를 생성한다. 캡슐 중심 높이로 배치하고 벽/바닥에 묻히지 않게 한다. 빈 공간을 확보할 수 없으면 생성하지 않는다.
+- 스폰 포인트를 레벨에 배치하면 해당 위치에서 `BP_EnemyStraightRunner` 한 마리를 생성한다. Details의 `SpawnSpeed`로 생성 적의 속도를, `SpawnDelay`로 BeginPlay 후 생성까지의 지연(초)을 조절한다. 포인트의 화살표가 배치 위치와 방향을 보여준다.
 - 생성기의 Details에서 `MoveSpeed`를 변경한다. 기본값 400 cm/s. 0 이하이면 정지한다.
 - 적을 직접 배치하거나 Spawn Actor from Class로 생성해도 된다. 적의 `MoveSpeed` 역시 인스턴스에서 조절 가능하고 실행 중 변경도 반영된다.
 - 이동은 가속/제동이 있는 CharacterMovement 기반이다. MoveSpeed는 최대 보행 속도이며 벽을 통과하거나 장애물을 우회하지 않는다.
