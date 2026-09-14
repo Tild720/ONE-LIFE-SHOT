@@ -79,3 +79,7 @@ DerivedDataCache/*
 **/Saved/
 **/DerivedDataCache/
 **/Binaries/
+
+# Local editor and build artifacts
+*.log
+*.tmp
