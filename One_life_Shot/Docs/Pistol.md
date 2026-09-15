@@ -1,5 +1,17 @@
 # Pistol 기본 전투
 
+## 발사 피드백과 HUD (2026-09-16)
+
+- 바닥처럼 수평인 표면을 조준할 때 총구 높이의 평면 교점을 사용해 수평 발사한다. 세로 표면(타깃/벽)은 실제 Trace 명중점을 향하며 충돌 시 총알을 제거한다.
+- Bullet 수명은 6초, 속도 2200. 장애물이 없으면 최대 약 13,200유닛 이동한다. Tracer 길이 220, 두께 3.5. 충돌 때문에 사라지는 동작은 유지한다.
+- CS_PistolFire: 0.18초, 위치 진폭 4, 주파수 32. CS_PistolHit: 0.12초, 진폭 5, 주파수 45. 회전/FOV는 흔들지 않는다.
+- BP_Pistol: MuzzleLightIntensity=6000, MuzzleLightDuration=0.10초. 총구 옆의 그림자 없는 주황색 Point Light가 발사 후 자동으로 꺼진다. 재발사하면 타이머를 다시 시작한다.
+- BP_TargetActor: HitFlashDuration=0.16초. 실제 Bullet 명중 시 M_TargetHitFlash 빨간 Overlay Material을 잠시 적용하고 제거한다. 원래 머티리얼은 보존한다.
+- /Game/ThirdPerson/Blueprints/BP_AmmoHUD: 오른쪽 아래 짙은 반투명 패널과 청록색 강조선, PISTOL / AMMO / Inf/inf 표시. 기존 BP_ThirdPersonGameMode의 HUD Class로 연결했다. HUDMargin, AmmoLabel을 Editor에서 조절한다. AmmoLabel은 요청한 테스트용 고정 표시이며 실제 탄약 연동은 하지 않는다.
+- 검증: PIE에서 총 획득 후 Tools/Test-PistolFeedback.py 실행. 총알 수평 이동 1500유닛 이상, 발사광 켜짐/꺼짐, 타깃 점멸/복원, HUD 생성 여부를 Saved/PistolFeedbackTest.json에 기록한다. 발사/명중 Shake 클래스도 기록한다.
+
+최신 설정은 이 절이 우선한다.
+
 ## 현재 테스트 모드 (2026-09-15)
 
 - `BP_Pistol.UnlimitedAmmo=true`: 좌클릭할 때마다 한 발씩 반복 발사한다. 자동 연사는 아니다. false로 바꾸면 아래의 기존 1발 규칙을 사용한다.
