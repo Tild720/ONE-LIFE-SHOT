@@ -1,5 +1,18 @@
 # Pistol 기본 전투
 
+## 현재 테스트 모드 (2026-09-15)
+
+- `BP_Pistol.UnlimitedAmmo=true`: 좌클릭할 때마다 한 발씩 반복 발사한다. 자동 연사는 아니다. false로 바꾸면 아래의 기존 1발 규칙을 사용한다.
+- 마우스 Trace가 빗나가도 총구 높이의 평면과 커서 광선의 교점을 사용해서 발사한다. 충돌 지점이 있을 때는 기존 Hit 위치를 사용한다.
+- Character `WeaponGripOffset.Scale=0.75`, PickupMesh Scale=0.75. 손의 본 스케일 보정을 포함한 장착 총의 실제 월드 Scale은 0.54이다.
+- BulletMesh Scale=1.0, Collision Radius=4, ProjectileSpeed=2200. 기본 수명 3초와 충돌 시 제거를 유지한다.
+- `BP_BulletProjectile.Tracer`: 엔진 Cylinder 메시를 총알 뒤에 붙인 길이 100, 두께 2.5의 발광 표시. 충돌과 그림자는 없다. 곡선 이동 이력을 남기는 Niagara 리본은 아니며 직선 총알의 시인성용이다.
+- `/Game/Weapons/Pistol/M_BulletTracer`: Unlit 발광 머티리얼. TracerColor로 색을 바꿀 수 있다. Tracer 컴포넌트의 Transform으로 길이와 두께를 조정한다.
+- 재현 확인: 빈 공간 조준 시 수정 전 생성 0개, 수정 후 1개. Enhanced Input으로 세 번 발사해 서로 다른 세 총알의 이동을 확인했고, Target 두 번 타격 로그도 확인했다.
+- 재검증 스크립트: PIE에서 Pistol 획득 후 Unreal Python으로 `Tools/Test-Pistol.py`를 실행한다. 결과는 `Saved/PistolTest.json` 및 Output Log에 출력한다.
+
+이하 문서는 최초 1발 전투 구현의 설명이며, 위 테스트 모드 설정이 우선한다.
+
 PROJECT.md는 저장소에서 찾지 못해 현재 Unreal/MCP 정보를 기준으로 작업했다. 기존 Third Person Character, 이동, 고정 쿼터뷰 및 마우스 방향 캐릭터 회전을 재사용한다.
 
 ## 생성 에셋
