@@ -1,5 +1,14 @@
 # Pistol 기본 전투
 
+## 잔광 시작점 및 명중 조각·탄피 (2026-09-16)
+
+- BP_BulletProjectile: 시작 잔광 길이 0. BeginPlay에서 위치를 기록하고, 실제 이동 거리까지 길이를 늘린다. MaxTrailLength=220에 도달하면 Actor Tick을 끈다. 따라서 발사 직후 총 뒤로 잔광이 튀어나오지 않는다.
+- BP_PistolImpactBits: 확인된 타깃 명중 위치에서 발광 네모 조각 8개를 배출한다. BurstSpeed=170, SpreadSpeed=100, 수명 0.45초. 엔진 Cube와 기존 M_BulletTracer를 재사용한다. 물리로 퍼지지만 다른 물체와 충돌하지 않는 장식 효과이며 Niagara 시스템은 아니다.
+- BP_PistolCasing / M_PistolCasing: 발사마다 황동색 원통 탄피 1개를 총 옆의 로컬 좌표 (10,25,15)에서 배출한다. EjectionSpeed=170, 위쪽 속도 140, 회전 후 중력으로 떨어지고 0.7초 후 제거한다. 충돌·게임플레이 영향은 없다.
+- Tools/Test-PistolCosmetics.py: PIE에서 총 획득 후 실행. 약 2.4초간 입력을 잠시 막고 테스트한 뒤 복원한다. 기존 테스트용 총알/조각/탄피를 정리하므로 일반 플레이 도중에는 실행하지 않는다. Saved/PistolCosmeticsTest.json에 잔광 범위, 조각·탄피 생성과 제거 결과를 기록한다.
+
+이 절의 잔광 동작이 아래의 고정 길이 설명보다 우선한다.
+
 ## 발사 피드백과 HUD (2026-09-16)
 
 - 바닥처럼 수평인 표면을 조준할 때 총구 높이의 평면 교점을 사용해 수평 발사한다. 세로 표면(타깃/벽)은 실제 Trace 명중점을 향하며 충돌 시 총알을 제거한다.
