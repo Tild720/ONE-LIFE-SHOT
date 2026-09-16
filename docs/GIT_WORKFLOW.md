@@ -9,3 +9,5 @@
 ## September 16 recovery
 
 The main working tree contained 153 untracked assets and five modified assets, all byte-identical to SB. SB also tracked ten generated files. The residual assets were backed up in a named stash, SB was integrated into main, and the generated files were removed from tracking while retaining local copies.
+
+The follow-up integration includes the remote pistol feedback and ammo HUD commits. The projectile retains main's target-hit effects and SB's runner overlap/death branch. Both local branches are synchronized before pushing; use a normal fast-forward push, never a force push, to preserve concurrent work.
