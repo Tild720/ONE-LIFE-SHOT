@@ -1,5 +1,50 @@
 # Pistol 기본 전투
 
+## 한 발 전투 폴리싱 (2026-09-30)
+
+앞뒤 이동은 유지한다. 이동의 목적은 빈 총 상태에서 적을 피하고 다음 사격 위치를 잡는 것이다. 원거리 처치 후 시체까지 걸어가는 공백은 적의 무기를 회수하는 짧은 시간으로 바꿨다.
+
+- **카메라:** 기존 Character의 SpringArm을 Pitch=-55, Yaw=90, ArmLength=1400으로 고정했다. 조준 회전에 따라 카메라 위치가 돌던 가로 RelativeLocation을 0으로 수정했다. Collision Test를 꺼 벽 근처에서 카메라 거리가 갑자기 줄지 않는다.
+- **처치 후 회수:** 기존 `BP_EnemyStraightRunner.Die`가 기존 `BP_PistolPickup`을 한 번 생성하고 `ReturnToPlayer`를 호출한다. 기본 0.55초 동안 현재 플레이어 위치로 이동하며, 도착 후 실제 획득에 성공해야 새 Pistol의 한 발을 얻는다. 비행 중에는 Ammo=0을 유지한다.
+- **획득 안전장치:** 기존 Pickup의 `TryAcquire`를 오버랩과 타이머가 공유한다. 이미 한 발이 있으면 총과 Pickup을 보존한다. 동시에 여러 무기가 돌아와도 하나만 장착하며 나머지는 근처에 남는다. 사망한 플레이어는 획득하지 못한다. 일반 바닥 Pickup은 접근해서 획득한다.
+- **첫 전투:** 기존 `Runner_EndSpawn_1/2`를 Y=1500/1900으로 옮겼다. SpawnDelay=2/3.5초, Interval=4초, MaxAliveEnemies=각 2, Slow Runner를 사용한다. 기존 SpawnSpeed를 사용할 수 있는 선택 옵션을 추가하고 이 두 배치에만 300을 적용했다. 다른 스포너는 기본 동작을 유지한다.
+- **피드백:** 기존 HUD에 `READY`, `EMPTY`, `DOWN` 상태와 조작 안내를 표시한다. 적 접촉은 `Character.FailRun`을 호출해 입력·이동·충돌을 중단하고 짧은 화면 페이드 후 기본 0.55초에 레벨을 다시 연다. R로 즉시 다시 시도할 수도 있다.
+- **Editor 조정값:** Pickup의 `ReturnDuration`, `PickupRadius`; Character의 `RetryDelay`; SpawnPoint의 `UseSpawnSpeedOverride`, `SpawnSpeed`와 기존 스폰 간격/수량.
+
+### 변경한 기존 에셋
+
+- `/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter`, `BP_AmmoHUD`
+- `/Game/Weapons/Pistol/BP_Pistol`, `BP_PistolPickup`
+- `/Game/Enemies/BP_EnemyStraightRunner`, `BP_EnemySpawnPoint`
+- `/Game/ThirdPerson/Lvl_ThirdPerson`과 기존 배치 액터의 World Partition 외부 파일
+
+### 확인 방법
+
+1. `Lvl_ThirdPerson`에서 Play하고 시작 Pickup에 접근한다. HUD `1/1`을 확인한다.
+2. 적을 맞춰 처치한다. 발사 직후 `0/1`, 무기 비행, 도착 후 `1/1`을 순서대로 확인한다. 허공에 쏘면 추가 발사가 되지 않는다.
+3. 마우스를 사방으로 움직이고 벽 옆에서 이동한다. 카메라 방향과 거리가 유지되는지 확인한다.
+4. 접근하는 적에게 닿으면 `DOWN`과 페이드 뒤 초기 Pickup 및 `0/1` 상태로 재시작하는지 확인한다.
+
+`Tools/Test-OneShotLoop.py`는 실제 Fire/Die/TryAcquire 호출로 단발 소모, 중복 사망, 비행 중 빈 총, 도착 후 획득, 장전 중 Pickup 보존, 동시 회수를 확인한다. `Tools/Test-OneShotCamera.py`는 PIE에서 캐릭터 회전·벽 위치·앞뒤 이동·사망·레벨 재시작 후 카메라 및 상태를 확인한다. 결과 파일은 각각 `Saved/OneShotLoopTest.json`, `Saved/OneShotCameraTest.json`이다. 테스트용 Python 호출은 플레이용 Blueprint에 저장하지 않는다.
+
+현재 구현 범위는 Pistol 전투 흐름이다. Shotgun/Sniper/RPG, 5개 시설 스테이지와 최종 클리어 흐름은 아직 완성되지 않았다.
+
+## 이전 한 발 전투 검증 기록 (2026-09-30)
+
+- `BP_Pistol.UnlimitedAmmo=false`: 획득한 Pistol은 한 발만 발사한다. 발사가 성공하면 Ammo가 0이 되고, 빈 총은 다음 Pickup을 얻을 때까지 손에 남는다.
+- 기존 `BP_ThirdPersonCharacter.EquipPistol`은 장착한 Pistol의 Ammo가 0일 때만 이전 총을 버리고 새 총을 장착한다. Ammo가 1이면 Pickup을 소비하지 않는다.
+- `BP_EnemyStraightRunner.Die`: 중복 사망 방지 후 기존 `BP_PistolPickup`을 사망 위치에 한 번 생성한다. Slow/Fast 자식 적도 이 동작을 상속한다.
+- `BP_EnemyStraightRunner.WeaponMesh`는 기존 `Gun_Pistol` 메시를 `WeaponSocket_R`에 붙이고 충돌을 끈다. 적이 쓰던 무기와 처치 후 떨어지는 무기가 일치하며, 자식 Runner도 상속한다.
+- 기존 `BP_AmmoHUD.AmmoLabel`은 시작 시 `0/1`, Pistol 획득 시 `1/1`, 발사 시 `0/1`로 바뀐다. Pickup과 Pistol의 기존 이벤트에서만 갱신한다.
+- `Lvl_ThirdPerson` 시작 구간의 `Runner_IntroEnemy`는 기존 `BP_EnemyStraightRunner`를 사용하며 MoveSpeed=0인 첫 사격 대상이다.
+- `BP_ThirdPersonPlayerController`의 R 키는 현재 레벨 이름으로 `OpenLevel`을 호출해 한 발을 빗맞혔을 때 즉시 다시 시도하게 한다. 아직 전투 구역별 체크포인트가 없어 레벨 시작점으로 돌아간다.
+- 적 `OnActorHit`의 기존 탄환 판별이 실패하면 충돌 액터가 플레이어인지 확인한다. 플레이어와 접촉한 경우 현재 레벨을 즉시 다시 연다. 실험용으로 첫 적의 MoveSpeed를 550으로 높여 충돌 후 레벨 재로드를 확인하고, 원래 값 0으로 되돌렸다.
+- UE 5.8 PIE에서 초기 Pickup 획득(Ammo 1), 발사 후 Ammo 0, 적 처치 후 Pickup 생성, 재획득(새 Pistol Ammo 1)을 확인했다. 별도 임시 Pickup으로 Ammo 0 상태의 즉시 교체도 확인한 뒤 임시 액터를 제거했다. HUD 값은 0/1 → 1/1 → 0/1로 확인했다.
+- PIE에서 R 입력 후 플레이어가 시작점으로 돌아가고 초기 Pickup 및 HUD 0/1이 복원되는 것을 확인했다.
+- `Tools/Test-Pistol.py`는 이제 세 번 입력 시 실제 이동하는 탄이 정확히 하나만 생기는지 확인한다. PIE에서 초기 Pickup을 획득한 뒤 실행한다.
+
+아래의 무한 탄약 테스트 모드와 `Inf/inf` HUD 설명은 이전 기록이며, 현재 동작에는 이 절을 우선한다.
+
 ## 잔광 시작점 및 명중 조각·탄피 (2026-09-16)
 
 - BP_BulletProjectile: 시작 잔광 길이 0. BeginPlay에서 위치를 기록하고, 실제 이동 거리까지 길이를 늘린다. MaxTrailLength=220에 도달하면 Actor Tick을 끈다. 따라서 발사 직후 총 뒤로 잔광이 튀어나오지 않는다.
