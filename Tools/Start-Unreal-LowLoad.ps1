@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $projectFile = Join-Path $projectRoot 'One_life_Shot/One_life_Shot.uproject'
-$editorPath = 'E:/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe'
+$editorPath = 'C:/Program Files/Epic Games/UE_5.8/Engine/Binaries/Win64/UnrealEditor.exe'
 if (Get-Process UnrealEditor -ErrorAction SilentlyContinue) {
     throw 'Unreal Editor is already running. Close it before starting another instance.'
 }
