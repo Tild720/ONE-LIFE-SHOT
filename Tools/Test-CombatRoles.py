@@ -82,7 +82,6 @@ def run():
     def check(name, condition, **evidence):
         report['checks'].append({'name': name, 'passed': bool(condition), **evidence})
         write()
-        assert condition, name
 
     def current_player():
         current_world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_game_world()
@@ -185,6 +184,11 @@ def run():
         check(label + '_consumes_one_shot', current.get_editor_property('Ammo') == 0,
               weapon_kind=current.get_editor_property('WeaponKind'))
         after_first = paths('bullet')
+        event(label + '_shot_geometry', origin=vector(current.get_editor_property('ShotOrigin')),
+              rotation=str(current.get_editor_property('ShotRotation')),
+              bullets=[{'position': vector(a.get_actor_location()), 'rotation': str(a.get_actor_rotation()),
+                        'velocity': vector(a.get_velocity())} for a in actors('bullet')
+                       if a.get_path_name() in after_first-before])
         current.call_method('Fire')
         current.call_method('Fire')
         collect_runtime_effects()
@@ -211,8 +215,9 @@ def run():
     def equip_kind(kind):
         assert ammo() == 0, 'Do not bypass the loaded-weapon pickup gate'
         before = paths('gun')
-        pawn.set_editor_property('NextWeaponKind', kind)
-        pawn.call_method('EquipPistol')
+        pickup = spawn(classes['pickup'], pawn.get_actor_location(), {'WeaponKind': kind})
+        if valid(pickup):
+            pickup.call_method('TryAcquire')
         collect_runtime_effects()
         current = gun()
         check(WEAPONS[kind].lower() + '_equips_requested_kind',
@@ -232,11 +237,11 @@ def run():
             unreal.unregister_slate_post_tick_callback(session['handle'])
             session['handle'] = None
         current = gun()
-        if valid(current) and current.get_path_name() in tracked:
-            pawn.set_editor_property('EquippedPistol', None)
         for actor in list(tracked.values()):
             if valid(actor):
                 actor.destroy_actor()
+        if valid(state.get('arena_floor')):
+            state['arena_floor'].destroy_actor()
         for actor, saved in isolated:
             if valid(actor):
                 actor.set_editor_property('MoveSpeed', saved['speed'])
@@ -279,7 +284,8 @@ def run():
         assert valid(world) and valid(pawn), 'Start a fresh PIE session before this check'
         controller = unreal.GameplayStatics.get_player_controller(world, 0)
         assert valid(controller) and not pawn.get_editor_property('Dead'), 'Run from a living local player'
-        unreal.WidgetBlueprintLibrary.set_focus_to_game_viewport()
+        if hasattr(unreal, 'WidgetBlueprintLibrary'):
+            unreal.WidgetBlueprintLibrary.set_focus_to_game_viewport()
         statics = unreal.get_default_object(unreal.GameplayStatics.static_class())
         maths = unreal.get_default_object(unreal.MathLibrary.static_class())
         system = unreal.get_default_object(unreal.SystemLibrary.static_class())
@@ -305,8 +311,10 @@ def run():
         assert movement, 'Player has no CharacterMovement component'
         original_location = pawn.get_actor_location()
         original_rotation = pawn.get_actor_rotation()
-        anchor = unreal.Vector(0.0, 3000.0, original_location.z)
+        anchor = unreal.Vector(20000.0, 20000.0, 142.25)
         baseline = {kind: paths(kind) for kind in ('gun', 'pickup', 'bullet')}
+        state['arena_floor'] = cover(unreal.Vector(0.0, 2500.0, -anchor.z), unreal.Vector(120.0, 120.0, 1.0))
+        tracked.pop(state['arena_floor'].get_path_name(), None)
         for spawner in actors('spawner'):
             disabled_spawners.append((spawner, spawner.get_editor_property('Enabled')))
             spawner.set_editor_property('Enabled', False)
@@ -421,7 +429,9 @@ def run():
                         actor = target['actor']
                         dead = target['observed_dead'] or not valid(actor)
                         outcomes.append({'position': target['position'], 'expected_dead': target['expected_dead'],
-                                         'dead': dead, 'observed_dead': target['observed_dead']})
+                                         'dead': dead, 'observed_dead': target['observed_dead'],
+                                         'actual_location': vector(actor.get_actor_location()) if valid(actor) else None,
+                                         'speed': actor.get_editor_property('MoveSpeed') if valid(actor) else None})
                     check(state['case']['name'] + '_outcome',
                           all(item['dead'] == item['expected_dead'] for item in outcomes),
                           targets=outcomes)
@@ -433,7 +443,8 @@ def run():
                 if current_phase == 'drop_setup':
                     kind = state['drop_kind']
                     assert ammo() == 0, 'Drop acquisition must start from an actually spent weapon'
-                    target = enemy(unreal.Vector(300.0, 650.0, 0.0), kind)
+                    # Shotgun close drop exercises overlap-before-role-assignment regression.
+                    target = enemy(unreal.Vector(130.0, 0.0, 0.0) if kind == 1 else unreal.Vector(300.0, 650.0, 0.0), kind)
                     weapon_component = target.get_editor_property('WeaponMesh')
                     weapon_mesh = weapon_component.get_editor_property('static_mesh')
                     appearance = {
@@ -442,6 +453,12 @@ def run():
                         'configured_tint': vector(target.get_editor_property('BodyTint')),
                         'actual_weapon_mesh': weapon_mesh.get_path_name() if valid(weapon_mesh) else None,
                     }
+                    material = target.get_editor_property('Mesh').get_material(0)
+                    actual_tint = material.call_method('K2_GetVectorParameterValue', args=('EnemyTint',))
+                    appearance['actual_material_tint'] = [actual_tint.r, actual_tint.g, actual_tint.b]
+                    check(WEAPONS[kind].lower() + '_material_tint_matches_role',
+                          all(abs(a-b)<.001 for a,b in zip(appearance['actual_material_tint'],appearance['configured_tint'])),
+                          actual=appearance['actual_material_tint'],expected=appearance['configured_tint'])
                     report['enemy_appearance'].append(appearance)
                     check(WEAPONS[kind].lower() + '_enemy_has_visible_weapon_mesh',
                           valid(weapon_mesh) and weapon_component.is_visible(),
