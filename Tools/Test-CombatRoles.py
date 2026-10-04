@@ -47,6 +47,7 @@ def run():
             'empty_recovery': 'Production Assault warning/pulse and actual charge into WorldStatic cover; no Die call',
             'contact': 'Runtime enemy root collision swept into the player, never direct FailRun',
             'restart': 'Replacement local PIE pawn after production death/restart',
+            'sniper_variants': 'Production Sniper Fire against actual child-class targets and mixed formations; drops observed during normal return, no direct damage/death call',
         },
         'checks': [], 'events': [], 'enemy_appearance': [],
     }
@@ -118,6 +119,14 @@ def run():
             for actor in actors(kind):
                 if actor.get_path_name() not in baseline[kind]:
                     remember(actor)
+                if kind == 'pickup' and state.get('case', {}).get('verify_fire_drops') \
+                        and state['phase'] in ('case_aim', 'case_outcome') \
+                        and actor.get_path_name() not in state.get('case_pickups_before', set()):
+                    records = state.setdefault('case_drop_records', {})
+                    records.setdefault(actor.get_path_name(), {
+                        'kind': int(actor.get_editor_property('WeaponKind')),
+                        'returning': bool(actor.get_editor_property('Returning')),
+                        'observed_at': game_time()})
         for target in state.get('targets', []):
             actor = target['actor']
             if valid(actor) and actor.get_editor_property('Dead'):
@@ -154,6 +163,24 @@ def run():
         actor.set_editor_property('MoveSpeed', 0.0)
         clear_decision(actor)
         return actor
+
+    def check_enemy_hit_channels(actor, label):
+        capsule = actor.get_component_by_class(unreal.CapsuleComponent)
+        mesh = actor.get_editor_property('Mesh')
+        telegraph = actor.get_editor_property('TelegraphMesh')
+        evidence = {'actor': actor.get_path_name(), 'class': actor.get_class().get_path_name(),
+                    'capsule_collision': str(capsule.get_collision_enabled()),
+                    'visibility': str(capsule.get_collision_response_to_channel(unreal.CollisionChannel.ECC_VISIBILITY)),
+                    'camera': str(capsule.get_collision_response_to_channel(unreal.CollisionChannel.ECC_CAMERA)),
+                    'mesh_collision': str(mesh.get_collision_enabled()),
+                    'telegraph_collision': str(telegraph.get_collision_enabled())}
+        check(label + '_runtime_sniper_and_blast_hit_channels',
+              capsule.get_collision_enabled() in (unreal.CollisionEnabled.QUERY_ONLY, unreal.CollisionEnabled.QUERY_AND_PHYSICS)
+              and capsule.get_collision_response_to_channel(unreal.CollisionChannel.ECC_VISIBILITY) == unreal.CollisionResponseType.ECR_BLOCK
+              and capsule.get_collision_response_to_channel(unreal.CollisionChannel.ECC_CAMERA) == unreal.CollisionResponseType.ECR_IGNORE
+              and mesh.get_collision_enabled() == unreal.CollisionEnabled.NO_COLLISION
+              and telegraph.get_collision_enabled() == unreal.CollisionEnabled.NO_COLLISION,
+              **evidence)
 
     def cover(offset, scale):
         actor = spawn(unreal.StaticMeshActor.static_class(), anchor + offset, scale=scale)
@@ -318,7 +345,15 @@ def run():
         for spawner in actors('spawner'):
             disabled_spawners.append((spawner, spawner.get_editor_property('Enabled')))
             spawner.set_editor_property('Enabled', False)
-        for original in actors('enemy'):
+        original_enemies = actors('enemy')
+        placed_intro = [a for a in original_enemies if a.get_actor_label() == 'Runner_IntroEnemy']
+        check('existing_placed_intro_enemy_is_present_for_collision_regression', len(placed_intro) == 1,
+              actors=[a.get_path_name() for a in placed_intro])
+        for original in placed_intro:
+            # Inspect before runtime isolation can hide stale placed-instance
+            # collision overrides. This is the real saved introduction robot.
+            check_enemy_hit_channels(original, 'placed_intro')
+        for original in original_enemies:
             timer_active = bool(system.call_method('K2_IsTimerActive', args=(original, 'EnemyRolePulse')))
             isolated.append((original, {
                 'speed': original.get_editor_property('MoveSpeed'),
@@ -349,6 +384,17 @@ def run():
              'targets': [(0.0, 2500.0, True), (0.0, 3500.0, True)]},
             {'name': 'sniper_stops_at_cover', 'kind': 2,
              'targets': [(0.0, 700.0, True), (0.0, 1500.0, False)],
+             'cover': [(unreal.Vector(0.0, 1050.0, 0.0), unreal.Vector(4.0, 0.25, 4.0))]},
+            {'name': 'sniper_hits_assault_variant', 'kind': 2, 'verify_fire_drops': True,
+             'targets': [(0.0, 1400.0, True, 1)]},
+            {'name': 'sniper_hits_heavy_variant', 'kind': 2, 'verify_fire_drops': True,
+             'targets': [(0.0, 1400.0, True, 3)]},
+            {'name': 'sniper_hits_sniper_variant', 'kind': 2, 'verify_fire_drops': True,
+             'targets': [(0.0, 1400.0, True, 2)]},
+            {'name': 'sniper_penetrates_mixed_basic_heavy_sniper', 'kind': 2, 'verify_fire_drops': True,
+             'targets': [(0.0, 700.0, True, 0), (0.0, 1400.0, True, 3), (0.0, 2100.0, True, 2)]},
+            {'name': 'sniper_mixed_variants_respect_solid_cover', 'kind': 2, 'verify_fire_drops': True,
+             'targets': [(0.0, 700.0, True, 0), (0.0, 1500.0, False, 3), (0.0, 2200.0, False, 2)],
              'cover': [(unreal.Vector(0.0, 1050.0, 0.0), unreal.Vector(4.0, 0.25, 4.0))]},
             {'name': 'rpg_cluster_radius', 'kind': 3,
              'targets': [(0.0, 1000.0, True), (-140.0, 1050.0, True),
@@ -403,10 +449,16 @@ def run():
                     equip_kind(case['kind'])
                     state['case'] = case
                     state['targets'] = []
-                    for x, y, expected in case['targets']:
-                        target = enemy(unreal.Vector(x, y, 0.0))
+                    state['case_pickups_before'] = paths('pickup')
+                    state['case_drop_records'] = {}
+                    for specification in case['targets']:
+                        x, y, expected = specification[:3]
+                        target_kind = int(specification[3]) if len(specification) > 3 else 0
+                        target = enemy(unreal.Vector(x, y, 0.0), target_kind)
                         state['targets'].append({'actor': target, 'expected_dead': expected,
-                                                 'observed_dead': False, 'position': [x, y]})
+                                                 'observed_dead': False, 'position': [x, y], 'kind': target_kind})
+                        if case.get('verify_fire_drops'):
+                            check_enemy_hit_channels(target, case['name'] + '_' + WEAPONS[target_kind].lower())
                     for offset, scale in case.get('cover', []):
                         cover(offset, scale)
                     aim(unreal.Vector(0.0, 600.0, -92.0))
@@ -428,13 +480,28 @@ def run():
                     for target in state['targets']:
                         actor = target['actor']
                         dead = target['observed_dead'] or not valid(actor)
-                        outcomes.append({'position': target['position'], 'expected_dead': target['expected_dead'],
+                        outcomes.append({'position': target['position'], 'enemy_kind': target.get('kind', 0),
+                                         'expected_dead': target['expected_dead'],
                                          'dead': dead, 'observed_dead': target['observed_dead'],
                                          'actual_location': vector(actor.get_actor_location()) if valid(actor) else None,
                                          'speed': actor.get_editor_property('MoveSpeed') if valid(actor) else None})
                     check(state['case']['name'] + '_outcome',
                           all(item['dead'] == item['expected_dead'] for item in outcomes),
                           targets=outcomes)
+                    if state['case'].get('verify_fire_drops'):
+                        records = list(state.get('case_drop_records', {}).values())
+                        expected_kinds = sorted(target['kind'] for target in state['targets'] if target['expected_dead'])
+                        actual_kinds = sorted(record['kind'] for record in records)
+                        check(state['case']['name'] + '_fire_drops_each_matching_weapon_once',
+                              actual_kinds == expected_kinds and all(record['returning'] for record in records),
+                              expected_kinds=expected_kinds, actual_kinds=actual_kinds, observed_drops=records)
+                        current = gun()
+                        check(state['case']['name'] + '_returns_only_one_matching_next_shot',
+                              valid(current) and ammo() == 1
+                              and int(current.get_editor_property('WeaponKind')) in expected_kinds
+                              and not current.get_editor_property('UnlimitedAmmo'),
+                              current_kind=int(current.get_editor_property('WeaponKind')) if valid(current) else None,
+                              ammo=ammo(), defeated_drop_count=len(expected_kinds))
                     state['case_index'] += 1
                     aim(unreal.Vector(-350.0, 50.0, -92.0))
                     phase('spend_for_case')

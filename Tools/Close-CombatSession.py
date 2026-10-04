@@ -10,7 +10,8 @@ def work():
            '/Game/Enemies/BP_EnemySpawnPoint','/Game/ThirdPerson/Blueprints/BP_ThirdPersonPlayerController',
            '/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter','/Game/ThirdPerson/Blueprints/BP_AmmoHUD',
            '/Game/Weapons/Pistol/BP_Pistol','/Game/Weapons/Pistol/BP_PistolPickup',
-           '/Game/Weapons/Pistol/BP_BulletProjectile']
+           '/Game/Weapons/Pistol/BP_BulletProjectile','/Game/UI/WBP_RunnerProgress',
+           '/Game/Runner/BP_RunnerProgress']
     for path in paths:
         bp=unreal.load_asset(path)
         assert bp,path
@@ -26,8 +27,14 @@ def work():
     if hasattr(builtins,'_ols_old_background_throttle'):
         perf.set_editor_property('bThrottleCPUWhenNotForeground',builtins._ols_old_background_throttle)
         del builtins._ols_old_background_throttle
+    window_original=builtins.__dict__.pop('_ols_qa_window_original',None)
+    if window_original:
+        settings=unreal.load_object(None,'/Script/UnrealEd.Default__LevelEditorPlaySettings')
+        for name,value in window_original.items():
+            settings.set_editor_property(name,value)
+    assert unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True,True)
     queue=builtins.__dict__.pop('_ols_editor_queue',None)
     if queue:
         unreal.unregister_slate_post_tick_callback(queue['handle'])
-    return {'compiled':paths,'shared_material_saved':material.get_path_name(),'bootstrap_absent':True,'pie_stopped':True,'background_preference_restored':True,'editor_queue_stopped':True}
+    return {'compiled':paths,'shared_material_saved':material.get_path_name(),'bootstrap_absent':True,'pie_stopped':True,'background_preference_restored':True,'qa_window_preference_restored':window_original is not None,'editor_queue_stopped':True}
 run_editor(work,'CombatSessionClosed.json')
