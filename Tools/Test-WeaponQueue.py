@@ -467,6 +467,15 @@ def run():
                     if now - state['flush_time'] < .16:
                         return
                     if valid(current()):
+                        # Aim after the camera has followed the fixture teleport.
+                        # Projecting in the setup frame still uses the old view.
+                        if state.get('flush_aim_ready') is None:
+                            aim()
+                            state['flush_aim_ready'] = now
+                            return
+                        if now - state['flush_aim_ready'] < .16:
+                            return
+                        state['flush_aim_ready'] = None
                         state['flush_count'] += 1
                         assert state['flush_count'] <= 2, 'Startup inventory exceeded two slots'
                         fire('startup_spend_' + str(state['flush_count']))

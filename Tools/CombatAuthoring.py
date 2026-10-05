@@ -36,6 +36,9 @@ def call(ed, path, **values):
                'Greater_DoubleDouble':'보다큼(>)'}.get(function)
     type_name = operator or compare
     n = ed.create_node_from_name('유틸리티|연산자|'+type_name, unreal.Vector2D(), []) if type_name else ed.add_call_function_node(path)
+    if not n and type_name:
+        # Node menu labels follow the editor language; function paths do not.
+        n = ed.add_call_function_node(path)
     assert n, path
     for k, v in values.items():
         if not inp(n, k).set_pin_value(str(v)):
