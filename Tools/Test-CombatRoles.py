@@ -202,25 +202,33 @@ def run():
     def fire_once(label):
         current = gun()
         assert valid(current) and ammo() == 1, 'Fire must begin with a real one-shot weapon'
+        fired_kind = int(current.get_editor_property('WeaponKind'))
+        reserve_before = int(pawn.get_editor_property('QueuedWeaponKind'))
         mouse = controller.get_mouse_position()
         ray = controller.deproject_mouse_position_to_world()
         assert mouse is not None and ray is not None, 'Focus the PIE viewport; mouse deprojection is unavailable'
         before = paths('bullet')
         current.call_method('Fire')
         collect_runtime_effects()
-        check(label + '_consumes_one_shot', current.get_editor_property('Ammo') == 0,
-              weapon_kind=current.get_editor_property('WeaponKind'))
+        promoted = gun()
+        promotion_ready = (not valid(promoted) if reserve_before < 0 else
+                           valid(promoted) and promoted.get_editor_property('WeaponKind') == reserve_before
+                           and promoted.get_editor_property('Ammo') == 1)
+        check(label + '_consumes_one_shot', not valid(current) and promotion_ready,
+              weapon_kind=fired_kind, reserve_before=reserve_before,
+              consumed_actor_removed=not valid(current),
+              next_kind=promoted.get_editor_property('WeaponKind') if valid(promoted) else None)
         after_first = paths('bullet')
-        event(label + '_shot_geometry', origin=vector(current.get_editor_property('ShotOrigin')),
-              rotation=str(current.get_editor_property('ShotRotation')),
+        # The fired actor is intentionally destroyed. Observe the actual
+        # projectiles instead of reading invalid post-Fire weapon properties.
+        event(label + '_shot_geometry', fired_weapon_kind=fired_kind,
+              shooter_location=vector(pawn.get_actor_location()),
               bullets=[{'position': vector(a.get_actor_location()), 'rotation': str(a.get_actor_rotation()),
                         'velocity': vector(a.get_velocity())} for a in actors('bullet')
                        if a.get_path_name() in after_first-before])
-        current.call_method('Fire')
-        current.call_method('Fire')
         collect_runtime_effects()
         extra = paths('bullet') - after_first
-        check(label + '_rejects_extra_presses', not extra and current.get_editor_property('Ammo') == 0,
+        check(label + '_does_not_fire_promoted_weapon_on_same_call', not extra and promotion_ready,
               projectiles_first=len(after_first - before), extra_projectiles=len(extra))
         return current
 
@@ -241,6 +249,7 @@ def run():
 
     def equip_kind(kind):
         assert ammo() == 0, 'Do not bypass the loaded-weapon pickup gate'
+        assert int(pawn.get_editor_property('QueuedWeaponKind')) == -1, 'Drain the reserve through real Fire before choosing a fixture weapon'
         before = paths('gun')
         pickup = spawn(classes['pickup'], pawn.get_actor_location(), {'WeaponKind': kind})
         if valid(pickup):
@@ -347,12 +356,23 @@ def run():
             spawner.set_editor_property('Enabled', False)
         original_enemies = actors('enemy')
         placed_intro = [a for a in original_enemies if a.get_actor_label() == 'Runner_IntroEnemy']
-        check('existing_placed_intro_enemy_is_present_for_collision_regression', len(placed_intro) == 1,
-              actors=[a.get_path_name() for a in placed_intro])
-        for original in placed_intro:
-            # Inspect before runtime isolation can hide stale placed-instance
-            # collision overrides. This is the real saved introduction robot.
-            check_enemy_hit_channels(original, 'placed_intro')
+        # Production SpawnNext assigns the spawn point as Owner. Inspect
+        # existing map enemies before runtime isolation, without
+        # requiring or recreating a placed actor the user may have deleted.
+        production_spawn_owners = paths('spawner')
+        placed_enemies = []
+        for original in original_enemies:
+            owner = original.call_method('GetOwner')
+            if not valid(owner) or owner.get_path_name() not in production_spawn_owners:
+                placed_enemies.append(original)
+        report['placed_enemy_collision_coverage'] = {
+            'intro_label': 'Runner_IntroEnemy', 'intro_present': bool(placed_intro),
+            'inspected_actors': [a.get_path_name() for a in placed_enemies],
+            'identification': 'Existing enemies without a production spawn-point Owner, before QA fixture creation',
+            'absence': None if placed_enemies else 'No existing placed enemy was available; placed-instance collision coverage was not exercised',
+            'intro_absence': None if placed_intro else 'Runner_IntroEnemy is absent; no actor was recreated and no intro-specific coverage is claimed'}
+        for original in placed_enemies:
+            check_enemy_hit_channels(original, 'existing_placed_' + original.get_actor_label())
         for original in original_enemies:
             timer_active = bool(system.call_method('K2_IsTimerActive', args=(original, 'EnemyRolePulse')))
             isolated.append((original, {
@@ -442,6 +462,15 @@ def run():
                     if ammo() == 1:
                         fire_once('setup_' + str(state['case_index']))
                     cleanup_case()
+                    if ammo() == 1:
+                        # Multi-kills may have filled the current and reserve.
+                        # Consume each slot with a separate production Fire;
+                        # cleanup removes excess world drops before they can
+                        # refill capacity while this fixture is being drained.
+                        aim(unreal.Vector(-350.0, 50.0, -92.0))
+                        phase('spend_for_case')
+                        return
+                    assert int(pawn.get_editor_property('QueuedWeaponKind')) == -1, 'An empty current must not retain an orphan reserve'
                     if state['case_index'] >= len(cases):
                         phase('drop_setup')
                         return
@@ -499,9 +528,12 @@ def run():
                         check(state['case']['name'] + '_returns_only_one_matching_next_shot',
                               valid(current) and ammo() == 1
                               and int(current.get_editor_property('WeaponKind')) in expected_kinds
-                              and not current.get_editor_property('UnlimitedAmmo'),
+                              and not current.get_editor_property('UnlimitedAmmo')
+                              and (int(pawn.get_editor_property('QueuedWeaponKind')) == -1
+                                   or int(pawn.get_editor_property('QueuedWeaponKind')) in expected_kinds),
                               current_kind=int(current.get_editor_property('WeaponKind')) if valid(current) else None,
-                              ammo=ammo(), defeated_drop_count=len(expected_kinds))
+                              ammo=ammo(), reserved_kind=int(pawn.get_editor_property('QueuedWeaponKind')),
+                              defeated_drop_count=len(expected_kinds))
                     state['case_index'] += 1
                     aim(unreal.Vector(-350.0, 50.0, -92.0))
                     phase('spend_for_case')
