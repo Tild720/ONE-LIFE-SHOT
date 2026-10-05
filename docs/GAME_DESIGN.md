@@ -9,6 +9,7 @@ ONE LIFE SHOT is a PC sci-fi action shooter set in a robot research and producti
 `Enter combat zone → identify enemies and their weapons → fire one shot → defeat an enemy → acquire its weapon → plan the next shot → clear the zone`
 
 - Each acquired weapon has exactly one shot and cannot reload.
+- Carry at most two weapons: the current weapon and one FIFO reserve. Firing consumes the current weapon and automatically equips the reserve. Multiple defeats can fill both slots; pickups beyond capacity remain in the world until a slot opens.
 - A defeated enemy drops the weapon it used.
 - The order in which enemies are defeated determines the available next weapon.
 - On death, restart from the current combat zone/checkpoint.
