@@ -17,13 +17,15 @@ if (!(Test-Path -LiteralPath $editorPath) -or !(Test-Path -LiteralPath $projectF
     throw 'Unreal Editor or project file was not found.'
 }
 $launchArguments = @(
-    ('"{0}"' -f $projectFile), '-dx11', '-nosplash', '-NoLiveCoding', '-nosound',
+    ('"{0}"' -f $projectFile), '-dx11', '-corelimit=2', '-nosplash', '-NoLiveCoding', '-windowed', '-ResX=640', '-ResY=360',
     '-ModelContextProtocolStartServer', '-log=LowLoadEditor.log',
-    '-ExecCmds="t.MaxFPS 20,sg.ViewDistanceQuality 0,sg.AntiAliasingQuality 0,sg.ShadowQuality 0,sg.GlobalIlluminationQuality 0,sg.ReflectionQuality 0,sg.PostProcessQuality 0,sg.TextureQuality 0,sg.EffectsQuality 0,sg.FoliageQuality 0,sg.ShadingQuality 0,r.ScreenPercentage 40,r.Streaming.PoolSize 192"'
+    '-ini:Engine:[DevOptions.Shaders]:NumUnusedShaderCompilingThreads=64,NumUnusedShaderCompilingThreadsDuringGame=64,ShaderCompilerCoreCountThreshold=128,PercentageUnusedShaderCompilingThreads=100',
+    '-ExecCmds="t.MaxFPS 10,sg.ViewDistanceQuality 0,sg.AntiAliasingQuality 0,sg.ShadowQuality 0,sg.GlobalIlluminationQuality 0,sg.ReflectionQuality 0,sg.PostProcessQuality 0,sg.TextureQuality 0,sg.EffectsQuality 0,sg.FoliageQuality 0,sg.ShadingQuality 0,r.ScreenPercentage 20,r.Streaming.PoolSize 128"'
 )
 if ($EditorAutomation) {
     $launchArguments += ('-ExecutePythonScript="{0}"' -f (Join-Path $PSScriptRoot 'Editor-Queue.py'))
 }
 $editorProcess = Start-Process -FilePath $editorPath -ArgumentList $launchArguments -WindowStyle Hidden -PassThru
 try { $editorProcess.PriorityClass = 'BelowNormal' } catch { Write-Warning 'Could not lower process priority.' }
+try { $editorProcess.ProcessorAffinity = [intptr]3 } catch { Write-Warning 'Could not limit the editor to two logical CPUs.' }
 Write-Output ('Started one low-load DX11 editor. PID: {0}' -f $editorProcess.Id)
